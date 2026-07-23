@@ -279,10 +279,14 @@ function pushParam(parts: string[], args: Record<string, unknown>, key: string) 
   }
 }
 
+function bar(theme: any, color?: string) {
+  return theme.fg(color ?? "borderMuted", "┃");
+}
+
 function renderCallLine(title: string, main: string[], extras: string[], theme: any) {
   const body = main.filter((part) => part.length > 0).join(" ");
   const meta = extras.length > 0 ? ` ${theme.fg("muted", `(${extras.join(", ")})`)}` : "";
-  return new Text(`${theme.fg("toolTitle", theme.bold(title))}${body}${meta}`, 0, 0);
+  return new Text(`${bar(theme)} ${theme.fg("toolTitle", theme.bold(title))}${body}${meta}`, 0, 0);
 }
 
 function renderHypaShellCall(args: Record<string, unknown>, theme: any) {
@@ -332,32 +336,73 @@ function renderHypaLsCall(args: Record<string, unknown>, theme: any) {
 }
 
 function previewResultText(result: any, options: { expanded?: boolean; isPartial?: boolean }, theme: any, pendingText: string) {
-  if (options?.isPartial) {
-    return new Text(theme.fg("muted", pendingText), 0, 0);
-  }
+  const details = (result?.details ?? {}) as Record<string, unknown>;
+  const exitCode = (details.exitCode as number) ?? null;
+  const isError = exitCode !== null && exitCode !== 0;
+  const trunc = details.truncation as { truncated?: boolean } | undefined;
 
-  const output = Array.isArray(result?.content)
+  // 根据 exitCode 决定 bar 和状态行颜色
+  const barColor = exitCode === null ? "borderMuted" : isError ? "error" : "success";
+  const b = bar(theme, barColor);
+
+  const rawOutput = Array.isArray(result?.content)
     ? result.content.filter((part: any) => part?.type === "text").map((part: any) => part.text).join("\n")
     : "";
 
-  if (!output) {
-    return new Text(theme.fg("muted", "(no output)"), 0, 0);
+  // 过滤冗余的内部消息（如 [Output truncated: ...] 和 [Hypa command ...]）
+  const filteredLines = rawOutput.split("\n").filter((l: string) => {
+    const t = l.trim();
+    return !t.startsWith("[Output truncated:") && !t.startsWith("[Hypa command");
+  });
+  const cleanOutput = filteredLines.join("\n");
+  const lineCount = cleanOutput ? cleanOutput.split("\n").filter((l: string) => l.trim()).length : 0;
+
+  // 状态行
+  let statusLine = b;
+  if (exitCode !== null) {
+    if (isError) {
+      statusLine += ` ${theme.bg("toolErrorBg", theme.fg("error", ` ✗ ${exitCode} `))}`;
+    } else {
+      statusLine += ` ${theme.bg("toolSuccessBg", theme.fg("success", " ✓ 0 "))}`;
+    }
+    statusLine += `  ${theme.fg("dim", `${lineCount} 行`)}`;
+    if (trunc?.truncated) {
+      statusLine += `  ${theme.fg("warning", "⚠ 已截断")}`;
+    }
+  } else {
+    statusLine += ` ${theme.fg("muted", "➜")}  ${theme.fg("dim", `${lineCount} 行`)}`;
   }
 
-  const styleOutput = (text: string) => text.split("\n").map((line: string) => theme.fg("toolOutput", line)).join("\n");
-
-  if (options?.expanded) {
-    return new Text(styleOutput(output), 0, 0);
+  if (options?.isPartial) {
+    return new Text(`${statusLine}\n${b} ${theme.fg("muted", pendingText)}`, 0, 0);
   }
 
-  const lines = output.split("\n");
-  if (lines.length <= 12) {
-    return new Text(styleOutput(output), 0, 0);
+  if (!cleanOutput) {
+    return new Text(statusLine, 0, 0);
   }
 
-  const preview = styleOutput(lines.slice(0, 12).join("\n"));
-  const hint = `\n${theme.fg("muted", `... (${lines.length - 12} more lines, Ctrl+O to expand)`)}`;
-  return new Text(`${preview}${hint}`, 0, 0);
+  const styleOutput = (text: string) =>
+    text
+      .split("\n")
+      .map((line: string) => `${b} ${theme.fg("toolOutput", line)}`)
+      .join("\n");
+
+  // 未展开时不显示输出内容（同 bash 风格）
+  if (!options?.expanded) {
+    return new Text(statusLine, 0, 0);
+  }
+
+  const lines = cleanOutput.split("\n");
+  const maxShow = 50;
+  const showLines = lines.slice(0, maxShow);
+  const preview = styleOutput(showLines.join("\n"));
+
+  const hint =
+    lines.length > maxShow
+      ? `\n${b} ${theme.fg("muted", `... 还有 ${lines.length - maxShow} 行`)}`
+      : "";
+
+  return new Text(`${statusLine}\n${preview}${hint}`, 0, 0);
 }
 
 async function toToolText(result: HypaExecResult, command: string, preferTail = false) {
@@ -403,6 +448,7 @@ export function registerHypaTools(pi: PiApi, config: HypaPiConfig) {
       "Do not use hypa_shell to read files; use hypa_read instead.",
     ],
     parameters: shellSchema,
+    renderShell: "self",
     async execute(_toolCallId, params, signal, _onUpdate, _ctx) {
       const result = await runHypaCommand(pi, config, params.command, params.timeoutMs, params.raw, signal);
       return toToolText(result, params.command, true);
@@ -411,7 +457,7 @@ export function registerHypaTools(pi: PiApi, config: HypaPiConfig) {
       return renderHypaShellCall(args ?? {}, theme);
     },
     renderResult(result: any, options: any, theme: any) {
-      return previewResultText(result, options ?? {}, theme, "Running Hypa shell command...");
+      return previewResultText(result, options ?? {}, theme, "⏳ 运行中...");
     },
   });
 
@@ -422,6 +468,7 @@ export function registerHypaTools(pi: PiApi, config: HypaPiConfig) {
     promptSnippet: "Read file contents through Hypa compression",
     promptGuidelines: ["Use hypa_read to inspect file contents instead of cat/head/tail via shell."],
     parameters: readSchema,
+    renderShell: "self",
     async execute(_toolCallId, params, signal, _onUpdate, _ctx) {
       const command = buildReadCommand(params.path, params.offset, params.limit);
       const timeoutMs = params.maxTokens ? undefined : undefined;
@@ -432,7 +479,7 @@ export function registerHypaTools(pi: PiApi, config: HypaPiConfig) {
       return renderHypaReadCall(args ?? {}, theme);
     },
     renderResult(result: any, options: any, theme: any) {
-      return previewResultText(result, options ?? {}, theme, "Reading file through Hypa...");
+      return previewResultText(result, options ?? {}, theme, "⏳ 读取中...");
     },
   });
 
@@ -442,6 +489,7 @@ export function registerHypaTools(pi: PiApi, config: HypaPiConfig) {
     description: `Search file contents with ripgrep through Hypa compression. Output is truncated to ${DEFAULT_MAX_LINES} lines or ${formatSize(DEFAULT_MAX_BYTES)} with full output saved when needed.`,
     promptSnippet: "Search file contents through Hypa compression",
     parameters: grepSchema,
+    renderShell: "self",
     async execute(_toolCallId, params, signal, _onUpdate, _ctx) {
       const command = buildGrepCommand(params as { pattern: string; path?: string; glob?: string; ignoreCase?: boolean; literal?: boolean; context?: number; limit?: number });
       const result = await runHypaCommand(pi, config, command, params.timeoutMs, false, signal);
@@ -451,7 +499,7 @@ export function registerHypaTools(pi: PiApi, config: HypaPiConfig) {
       return renderHypaGrepCall(args ?? {}, theme);
     },
     renderResult(result: any, options: any, theme: any) {
-      return previewResultText(result, options ?? {}, theme, "Searching through Hypa...");
+      return previewResultText(result, options ?? {}, theme, "⏳ 搜索中...");
     },
   });
 
@@ -461,6 +509,7 @@ export function registerHypaTools(pi: PiApi, config: HypaPiConfig) {
     description: `Find files through Hypa compression. Output is truncated to ${DEFAULT_MAX_LINES} lines or ${formatSize(DEFAULT_MAX_BYTES)} with full output saved when needed.`,
     promptSnippet: "Find files through Hypa compression",
     parameters: findSchema,
+    renderShell: "self",
     async execute(_toolCallId, params, signal, _onUpdate, _ctx) {
       const command = buildFindCommand(params);
       const result = await runHypaCommand(pi, config, command, params.timeoutMs, false, signal);
@@ -474,7 +523,7 @@ export function registerHypaTools(pi: PiApi, config: HypaPiConfig) {
       return renderHypaFindCall(args ?? {}, theme);
     },
     renderResult(result: any, options: any, theme: any) {
-      return previewResultText(result, options ?? {}, theme, "Finding files through Hypa...");
+      return previewResultText(result, options ?? {}, theme, "⏳ 搜索中...");
     },
   });
 
@@ -484,6 +533,7 @@ export function registerHypaTools(pi: PiApi, config: HypaPiConfig) {
     description: `List directory contents through Hypa compression. Output is truncated to ${DEFAULT_MAX_LINES} lines or ${formatSize(DEFAULT_MAX_BYTES)} with full output saved when needed.`,
     promptSnippet: "List directory contents through Hypa compression",
     parameters: lsSchema,
+    renderShell: "self",
     async execute(_toolCallId, params, signal, _onUpdate, _ctx) {
       const command = buildLsCommand(params);
       const result = await runHypaCommand(pi, config, command, params.timeoutMs, false, signal);
@@ -493,7 +543,7 @@ export function registerHypaTools(pi: PiApi, config: HypaPiConfig) {
       return renderHypaLsCall(args ?? {}, theme);
     },
     renderResult(result: any, options: any, theme: any) {
-      return previewResultText(result, options ?? {}, theme, "Listing directory through Hypa...");
+      return previewResultText(result, options ?? {}, theme, "⏳ 列表中...");
     },
   });
 }
