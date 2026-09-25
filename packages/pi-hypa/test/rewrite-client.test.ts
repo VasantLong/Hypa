@@ -17,6 +17,7 @@ const config: HypaPiConfig = {
   binary: "hypa",
   rewriteTimeoutMs: 5000,
   askNonInteractive: "deny",
+  bashRewrite: true,
   mcpProxyEnabled: false,
   mcpProxyTimeoutMs: 10000,
 };

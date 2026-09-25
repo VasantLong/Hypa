@@ -15,6 +15,7 @@ function config(piMcpConfigPath?: string): HypaPiConfig {
     binary: "hypa",
     rewriteTimeoutMs: 5000,
     askNonInteractive: "deny",
+    bashRewrite: true,
     mcpProxyEnabled: true,
     mcpProxyTimeoutMs: 10000,
     piMcpConfigPath,
