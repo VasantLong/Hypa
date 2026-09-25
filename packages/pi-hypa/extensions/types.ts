@@ -28,6 +28,8 @@ export interface HypaPiConfig {
   binary: string;
   rewriteTimeoutMs: number;
   askNonInteractive: AskNonInteractivePolicy;
+  /** Rewrite bash tool calls through `hypa rewrite` (wraps them as `hypa -c "..."`). Off leaves bash unmodified. */
+  bashRewrite: boolean;
   mcpProxyEnabled: boolean;
   mcpProxyTimeoutMs: number;
   piMcpConfigPath?: string;
@@ -35,6 +37,7 @@ export interface HypaPiConfig {
 
 export interface HypaDiagnostics {
   mode: HypaPiMode;
+  bashRewrite: boolean;
   configFilePath?: string;
   binary: string;
   resolvedBinary: string;
