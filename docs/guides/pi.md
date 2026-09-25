@@ -39,11 +39,12 @@ hypa init --agent pi
 ## Configuration
 
 | Variable | Default | Description |
-|---|---|---|
+| --- | --- | --- |
 | `HYPA_BIN` | bundled `@hypabolic/hypa`, then `hypa` | Hypa executable or absolute path. |
 | `HYPA_PI_MODE` | `additive` | `additive` keeps Pi builtins; `replace` disables Pi `bash/read/grep/find/ls` after registering `hypa_*` tools. |
 | `HYPA_PI_REWRITE_TIMEOUT_MS` | `5000` | Rewrite CLI timeout in milliseconds. |
 | `HYPA_PI_ASK_NON_INTERACTIVE` | `deny` | `Ask` fallback when `ctx.hasUI === false`: `deny` or `allow`. |
+| `HYPA_PI_BASH_REWRITE` | `1` | `0` disables rewriting of `bash` tool calls (no `hypa -c "..."` wrapper, no `Deny`/`Ask` interception). `hypa_*` tools stay available for explicit compression. |
 
 ## Release path
 
