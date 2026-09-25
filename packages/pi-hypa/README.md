@@ -58,6 +58,7 @@ Hypa is invoked via the platform-native binary whenever it is installed as an op
 | `HYPA_PI_MODE` | `additive` | `additive` keeps Pi builtins; `replace` disables Pi `bash/read/grep/find/ls` after registering `hypa_*` tools. |
 | `HYPA_PI_REWRITE_TIMEOUT_MS` | `5000` | Rewrite CLI timeout in milliseconds. |
 | `HYPA_PI_ASK_NON_INTERACTIVE` | `deny` | `Ask` fallback when `ctx.hasUI === false`: `deny` or `allow`. |
+| `HYPA_PI_BASH_REWRITE` | `1` | `0` disables rewriting of `bash` tool calls (no `hypa -c "..."` wrapper, no `Deny`/`Ask` interception). `hypa_*` tools stay available for explicit compression. |
 | `HYPA_PI_ENABLE_MCP_PROXY` | `0` | Enable `hypa_mcp_proxy`, a lazy discovery/invocation bridge for upstream MCP servers configured in Hypa. |
 | `HYPA_PI_ENABLE_MCP` | unset | Legacy alias for `HYPA_PI_ENABLE_MCP_PROXY` if needed. |
 | `HYPA_PI_MCP_PROXY_TIMEOUT_MS` | `10000` | Timeout for `hypa mcp ...` proxy calls. |
@@ -72,6 +73,7 @@ Environment variables override config file values, and config file values overri
   "binary": "hypa",
   "rewriteTimeoutMs": 5000,
   "askNonInteractive": "deny",
+  "bashRewrite": true,
   "mcpProxyEnabled": false,
   "mcpProxyTimeoutMs": 10000,
   "piMcpConfigPath": "~/.pi/agent/mcp.json"

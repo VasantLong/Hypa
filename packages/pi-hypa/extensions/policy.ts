@@ -59,6 +59,7 @@ export function loadConfigFile(filePath: string): Partial<HypaPiConfig> {
     if (value > 0) result.rewriteTimeoutMs = value;
   }
   if (typeof config.askNonInteractive === "string") result.askNonInteractive = parseAskNonInteractive(config.askNonInteractive);
+  if (typeof config.bashRewrite === "boolean") result.bashRewrite = config.bashRewrite;
   if (typeof config.mcpProxyEnabled === "boolean") result.mcpProxyEnabled = config.mcpProxyEnabled;
   if (typeof config.mcpProxyTimeoutMs === "number") {
     const value = parsePositiveInteger(String(config.mcpProxyTimeoutMs), 0);
@@ -85,6 +86,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, configFilePath?
       env.HYPA_PI_ASK_NON_INTERACTIVE !== undefined
         ? parseAskNonInteractive(env.HYPA_PI_ASK_NON_INTERACTIVE)
         : (fileConfig.askNonInteractive ?? "deny"),
+    bashRewrite:
+      env.HYPA_PI_BASH_REWRITE !== undefined
+        ? parseBooleanFlag(env.HYPA_PI_BASH_REWRITE)
+        : (fileConfig.bashRewrite ?? true),
     mcpProxyEnabled: mcpProxyFlag !== undefined ? parseBooleanFlag(mcpProxyFlag) : (fileConfig.mcpProxyEnabled ?? false),
     mcpProxyTimeoutMs:
       env.HYPA_PI_MCP_PROXY_TIMEOUT_MS !== undefined
@@ -100,7 +105,12 @@ export function isHypaCommand(command: string): boolean {
 }
 
 export function parseRewriteJson(stdout: string): RewriteResultV1 {
-  const payload = JSON.parse(stdout.trim()) as Partial<RewriteResultV1>;
+  let payload: Partial<RewriteResultV1>;
+  try {
+    payload = JSON.parse(stdout.trim()) as Partial<RewriteResultV1>;
+  } catch (err) {
+    throw new Error(`Failed to parse rewrite result: ${(err as Error).message}`);
+  }
   if (typeof payload.input !== "string") {
     throw new Error("rewrite result missing string field: input");
   }

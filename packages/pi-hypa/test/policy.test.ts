@@ -25,6 +25,11 @@ test("parseRewriteJson rejects unknown outcomes", () => {
   );
 });
 
+test("parseRewriteJson reports malformed JSON with context", () => {
+  assert.throws(() => parseRewriteJson("{ not json"), /Failed to parse rewrite result/);
+  assert.throws(() => parseRewriteJson("   "), /Failed to parse rewrite result/);
+});
+
 test("mapRewriteResult maps rewrite and passthrough outcomes", () => {
   assert.deepEqual(
     mapRewriteResult({ input: "git status", outcome: "GenericWrapper", command: "hypa git status" }),
@@ -163,4 +168,38 @@ test("resolveConfigFilePath returns undefined for empty or 'none' values", () =>
 
 test("resolveConfigFilePath returns an explicit trimmed path", () => {
   assert.equal(resolveConfigFilePath({ HYPA_PI_CONFIG: "  /tmp/custom.json  " }), "/tmp/custom.json");
+});
+
+test("loadConfig keeps bash rewriting on by default (upstream behavior)", () => {
+  assert.equal(loadConfig({ HYPA_PI_CONFIG: "none" }).bashRewrite, true);
+});
+
+test("loadConfig disables bash rewriting via HYPA_PI_BASH_REWRITE", () => {
+  for (const value of ["off", "OFF", "0", "false", "no"]) {
+    assert.equal(loadConfig({ HYPA_PI_CONFIG: "none", HYPA_PI_BASH_REWRITE: value }).bashRewrite, false, value);
+  }
+  for (const value of ["on", "1", "true", "yes"]) {
+    assert.equal(loadConfig({ HYPA_PI_CONFIG: "none", HYPA_PI_BASH_REWRITE: value }).bashRewrite, true, value);
+  }
+});
+
+test("loadConfig disables bash rewriting via config file, env wins", () => {
+  const configPath = join(tempRoot, "bash-rewrite.json");
+  writeFileSync(configPath, JSON.stringify({ bashRewrite: false }));
+  assert.equal(loadConfig({ HYPA_PI_CONFIG: configPath }, configPath).bashRewrite, false);
+
+  const enabledPath = join(tempRoot, "bash-rewrite-on.json");
+  writeFileSync(enabledPath, JSON.stringify({ bashRewrite: true }));
+  assert.equal(loadConfig({ HYPA_PI_CONFIG: enabledPath }, enabledPath).bashRewrite, true);
+  assert.equal(
+    loadConfig({ HYPA_PI_CONFIG: enabledPath, HYPA_PI_BASH_REWRITE: "off" }, enabledPath).bashRewrite,
+    false,
+    "env must win over config file",
+  );
+});
+
+test("loadConfigFile only accepts a boolean bashRewrite", () => {
+  const configPath = join(tempRoot, "bash-rewrite-types.json");
+  writeFileSync(configPath, JSON.stringify({ bashRewrite: "off" }));
+  assert.deepEqual(loadConfigFile(configPath), {}, "string value must be ignored (env is the string channel)");
 });

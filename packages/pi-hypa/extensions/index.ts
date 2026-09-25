@@ -24,6 +24,7 @@ export default function (pi: ExtensionAPI) {
   const effectiveConfig = { ...config, binary: resolveHypaBinary(config.binary) };
   const diagnostics: HypaDiagnostics = {
     mode: config.mode,
+    bashRewrite: config.bashRewrite,
     binary: config.binary,
     resolvedBinary: effectiveConfig.binary,
     configFilePath,
@@ -43,43 +44,47 @@ export default function (pi: ExtensionAPI) {
     });
   }
 
-  pi.on("tool_call", async (event, ctx) => {
-    if (!isToolCallEventType("bash", event)) return;
+  // Bash rewriting is optional: when off, bash tool calls are never wrapped as `hypa -c "..."`
+  // (hypa_shell/hypa_read/... stay available for explicit compression).
+  if (config.bashRewrite) {
+    pi.on("tool_call", async (event, ctx) => {
+      if (!isToolCallEventType("bash", event)) return;
 
-    const original = event.input.command;
-    const status = await rewriteCommand(pi, effectiveConfig, original, ctx.signal);
-    record(status);
+      const original = event.input.command;
+      const status = await rewriteCommand(pi, effectiveConfig, original, ctx.signal);
+      record(status);
 
-    switch (status.kind) {
-      case "rewritten":
-        event.input.command = status.command;
-        return;
-      case "passthrough":
-      case "skipped":
-      case "error":
-        return;
-      case "deny":
-        return { block: true, reason: status.reason };
-      case "ask": {
-        if (ctx.hasUI) {
-          const ok = await ctx.ui.confirm("Hypa confirmation", status.reason);
-          if (!ok) return { block: true, reason: "Blocked by user after Hypa confirmation request." };
+      switch (status.kind) {
+        case "rewritten":
           event.input.command = status.command;
           return;
-        }
-
-        if (config.askNonInteractive === "allow") {
-          event.input.command = status.command;
+        case "passthrough":
+        case "skipped":
+        case "error":
           return;
-        }
+        case "deny":
+          return { block: true, reason: status.reason };
+        case "ask": {
+          if (ctx.hasUI) {
+            const ok = await ctx.ui.confirm("Hypa confirmation", status.reason);
+            if (!ok) return { block: true, reason: "Blocked by user after Hypa confirmation request." };
+            event.input.command = status.command;
+            return;
+          }
 
-        return {
-          block: true,
-          reason: `${status.reason} Non-interactive fallback is deny (set HYPA_PI_ASK_NON_INTERACTIVE=allow to allow).`,
-        };
+          if (config.askNonInteractive === "allow") {
+            event.input.command = status.command;
+            return;
+          }
+
+          return {
+            block: true,
+            reason: `${status.reason} Non-interactive fallback is deny (set HYPA_PI_ASK_NON_INTERACTIVE=allow to allow).`,
+          };
+        }
       }
-    }
-  });
+    });
+  }
 
   pi.registerCommand("hypa", {
     description: "Show Hypa Pi extension diagnostics",
@@ -88,6 +93,7 @@ export default function (pi: ExtensionAPI) {
       const lines = [
         "Hypa Pi extension",
         `Mode: ${diagnostics.mode}`,
+        `Bash rewrite: ${diagnostics.bashRewrite ? "enabled" : "disabled"}`,
         `Config file: ${diagnostics.configFilePath ?? "none"}`,
         `Binary: ${diagnostics.binary}`,
         `Resolved binary: ${diagnostics.resolvedBinary}`,
