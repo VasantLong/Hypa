@@ -1,7 +1,7 @@
 import { isToolCallEventType, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { formatStatus, loadConfig, resolveConfigFilePath } from "./policy.js";
 import { injectExecutionTimeout } from "./execution-timeout.js";
-import { qualifyRewrittenHypaCommand, resolveHypaBinary, rewriteCommand } from "./rewrite-client.js";
+import { qualifyRewrittenHypaCommand, readCliVersion, resolveHypaBinary, rewriteCommand } from "./rewrite-client.js";
 import { registerHypaMcpProxyBridge } from "./mcp-proxy-bridge.js";
 import { reportResumeIfRequested } from "./resume-report.js";
 import { registerHypaTools } from "./tools.js";
@@ -135,6 +135,8 @@ export default function (pi: ExtensionAPI) {
     description: "Show Hypa Pi extension diagnostics",
     handler: async (_args, ctx) => {
       diagnostics.resolvedBinary = resolveHypaBinary(config.binary);
+      // 探测实际会被调用的那个二进制，与下面展示的 Resolved binary 保持一致
+      const cliVersion = await readCliVersion(pi, { ...effectiveConfig, binary: diagnostics.resolvedBinary });
       const lines = [
         "Hypa Pi extension",
         `Mode: ${diagnostics.mode}`,
@@ -142,6 +144,7 @@ export default function (pi: ExtensionAPI) {
         `Config file: ${diagnostics.configFilePath ?? "none"}`,
         `Binary: ${diagnostics.binary}`,
         `Resolved binary: ${diagnostics.resolvedBinary}`,
+        `CLI version: ${cliVersion ?? "unknown"}`,
         `Rewrite timeout: ${config.rewriteTimeoutMs}ms`,
         `Ask fallback (non-UI): ${config.askNonInteractive}`,
         `MCP proxy discovery: ${config.mcpProxyEnabled ? "enabled" : "disabled"}`,

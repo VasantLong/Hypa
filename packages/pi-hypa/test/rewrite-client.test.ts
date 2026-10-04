@@ -9,6 +9,8 @@ import {
   rewriteCommand,
   getExecArgs,
   qualifyRewrittenHypaCommand,
+  parseCliVersion,
+  readCliVersion,
 } from "../extensions/rewrite-client.js";
 import type { HypaPiConfig } from "../extensions/types.js";
 
@@ -374,4 +376,32 @@ test("qualifyRewrittenHypaCommand wraps .js entrypoints with the host runtime", 
     qualifyRewrittenHypaCommand("hypa git status", binary, runtime),
     `'${runtime}' '${binary}' git status`,
   );
+});
+
+test("parseCliVersion reads a plain version line", () => {
+  assert.equal(parseCliVersion("1.0.4\n"), "1.0.4");
+  assert.equal(parseCliVersion("0.1.11"), "0.1.11");
+});
+
+test("parseCliVersion tolerates prefixed, indented and suffixed output", () => {
+  assert.equal(parseCliVersion("hypa 1.0.4 (build abc123)"), "1.0.4");
+  assert.equal(parseCliVersion("\n   1.0.4-rc.1  \n"), "1.0.4-rc.1");
+});
+
+test("parseCliVersion returns undefined when no version is present", () => {
+  assert.equal(parseCliVersion(""), undefined);
+  assert.equal(parseCliVersion("   \n\n"), undefined);
+  assert.equal(parseCliVersion("no version here"), undefined);
+});
+
+test("readCliVersion probes the configured binary and fails open", async () => {
+  assert.equal(await readCliVersion(fakePi("1.0.4\n") as unknown as ExtensionAPI, config), "1.0.4");
+  assert.equal(await readCliVersion(fakePi("", { code: 1 }) as unknown as ExtensionAPI, config), undefined);
+  assert.equal(await readCliVersion(fakePi("1.0.4", { killed: true }) as unknown as ExtensionAPI, config), undefined);
+  const throwing = {
+    exec: async () => {
+      throw new Error("spawn hypa ENOENT");
+    },
+  } as unknown as ExtensionAPI;
+  assert.equal(await readCliVersion(throwing, config), undefined);
 });
