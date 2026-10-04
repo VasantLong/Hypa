@@ -1,9 +1,9 @@
 {
   "name": "hypa-pi-extension",
-  "version": "0.1.11",
+  "version": "1.0.4",
   "private": true,
   "type": "module",
-  "description": "Hypa Pi extension - forked with pipe-bar rendering",
+  "description": "Hypa Pi extension - fork of Hypabolic/Hypa with pipe-bar rendering and an optional bash rewrite toggle",
   "pi": {
     "extensions": [
       "./packages/pi-hypa/extensions"
