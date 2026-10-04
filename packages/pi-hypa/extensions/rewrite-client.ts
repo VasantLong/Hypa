@@ -287,3 +287,36 @@ export async function rewriteCommand(
     return { kind: "error", input: command, error: message };
   }
 }
+
+/**
+ * `<cli> --version` 输出取首个语义化版本号；拿不到版本时返回 undefined。
+ * 真实输出可能是 `1.0.4`，也可能带前缀、缩进、换行或构建后缀（如 `1.0.4-rc.1`）。
+ */
+export function parseCliVersion(stdout: string): string | undefined {
+  const firstLine = stdout
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .find((line) => line.length > 0);
+  if (firstLine === undefined) return undefined;
+  return firstLine.match(/\d+\.\d+(?:\.\d+)?(?:[-+][\w.]+)?/)?.[0];
+}
+
+/**
+ * 探测 CLI 版本，仅供 `/hypa` 诊断展示。
+ * 探测失败、超时或输出不可解析一律返回 undefined —— 诊断命令本身不能因此报错。
+ */
+export async function readCliVersion(
+  pi: ExtensionAPI,
+  config: HypaPiConfig,
+  timeoutMs = 5000,
+): Promise<string | undefined> {
+  try {
+    const [execBin, execArgs] = getExecArgs(config.binary, ["--version"]);
+    const result = await pi.exec(execBin, execArgs, { timeout: timeoutMs });
+    if (result.killed) return undefined;
+    return parseCliVersion(result.stdout ?? "");
+  } catch {
+    // 只读展示：探测失败不应影响 /hypa 的其余信息
+    return undefined;
+  }
+}
